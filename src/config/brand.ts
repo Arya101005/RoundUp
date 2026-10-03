@@ -7,5 +7,5 @@ export const brand = {
   tagline: 'Private rooms. Real-time party games with friends.',
   description:
     'Create a room, share a 5-character code, and play six real-time party games together. No signup required.',
-  repoUrl: '', // Set to the public GitHub repo URL; footer hides the link while empty.
+  repoUrl: 'https://github.com/Arya101005/RoundUp',
 } as const;
