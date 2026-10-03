@@ -33,7 +33,7 @@ export default createHandler('send-chat', { requireAuth: true }, async ({ client
 
   const clean = sanitizeChatBody(parsed.data.body);
   if (!clean.ok) {
-    return fail(clean.reason === 'length' ? 'INVALID_INPUT' : 'INVALID_INPUT', undefined, now);
+    return fail('INVALID_INPUT', undefined, now);
   }
 
   // Membership check via RLS helper (service role bypasses RLS, so check explicitly).
