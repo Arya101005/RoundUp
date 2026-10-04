@@ -16,6 +16,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Edge function endpoint. Defaults to the Supabase Edge Functions gateway;
+ * set VITE_FUNCTIONS_BASE (e.g. https://APP.vercel.app/api/functions) to use
+ * the Vercel adapter instead. Same handlers, same auth, same responses.
+ */
+function functionsBase(): string {
+  const override = import.meta.env.VITE_FUNCTIONS_BASE;
+  if (override && override.length > 0) return override.replace(/\/$/, '');
+  return `${supabaseUrl}/functions/v1`;
+}
+
 /** Calls an Edge Function and returns its parsed success payload. */
 export async function invokeFunction<T extends object>(
   name: string,
@@ -31,7 +42,7 @@ export async function invokeFunction<T extends object>(
 
   let res: Response;
   try {
-    res = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
+    res = await fetch(`${functionsBase()}/${name}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

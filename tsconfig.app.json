@@ -25,5 +25,5 @@
       "@shared/*": ["supabase/functions/_shared/*"]
     }
   },
-  "include": ["src", "tests/unit", "supabase/functions/_shared"]
+  "include": ["src", "tests/unit", "tests/integration", "supabase/functions/_shared"]
 }

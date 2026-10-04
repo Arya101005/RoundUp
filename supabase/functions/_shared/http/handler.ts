@@ -9,7 +9,13 @@ let cachedClient: SupabaseClient | null = null;
 /** Service-role client. Only used inside Edge Functions, never in the browser. */
 export function serviceClient(): SupabaseClient {
   if (cachedClient) return cachedClient;
-  cachedClient = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'), {
+  // SUPABASE_URL is injected on the Edge Runtime; VITE_SUPABASE_URL covers
+  // the Vercel adapter and local tests (it is not a secret, just the URL).
+  const url = env('SUPABASE_URL') ?? env('VITE_SUPABASE_URL');
+  if (!url) {
+    throw new Error('Missing required environment variable: SUPABASE_URL');
+  }
+  cachedClient = createClient(url, requireEnv('SUPABASE_SERVICE_ROLE_KEY'), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return cachedClient;
@@ -41,14 +47,66 @@ function originAllowed(origin: string | null): boolean {
   return allowed.length === 0 || allowed.includes(origin);
 }
 
-/** Verifies the bearer JWT and returns the authenticated user id (never from the body). */
+/** A rejection the auth service made about the token itself (4xx, not 429). */
+function isDefinitiveAuthRejection(error: unknown): boolean {
+  const status = (error as { status?: number } | null)?.status;
+  return (
+    typeof status === 'number' && status >= 400 && status < 500 && status !== 429
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`auth verification timed out after ${ms}ms`)),
+      ms,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+const AUTH_ATTEMPTS = 3;
+const AUTH_TIMEOUT_MS = 5_000;
+
+/**
+ * Verifies the bearer JWT and returns the authenticated user id (never from the body).
+ *
+ * Network blips against the auth service (timeouts, ECONNRESET) are retried and
+ * ultimately surfaced as SERVER_ERROR — never as UNAUTHORIZED — so a transient
+ * outage cannot sign players out. Only a 4xx answer from GoTrue means "bad token".
+ */
 export async function verifyJwt(req: Request, client: SupabaseClient): Promise<string | null> {
   const header = req.headers.get('Authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return null;
-  const { data, error } = await client.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user.id;
+
+  let lastFailure: unknown;
+  for (let attempt = 1; attempt <= AUTH_ATTEMPTS; attempt++) {
+    if (attempt > 1) {
+      await new Promise((r) => setTimeout(r, 300 * (attempt - 1)));
+    }
+    try {
+      const { data, error } = await withTimeout(
+        client.auth.getUser(token),
+        AUTH_TIMEOUT_MS,
+      );
+      if (!error && data.user) return data.user.id;
+      if (error && isDefinitiveAuthRejection(error)) return null;
+      lastFailure = error ?? new Error('auth service returned no user');
+    } catch (err) {
+      lastFailure = err; // transport failure or timeout — retry
+    }
+  }
+  throw lastFailure instanceof Error ? lastFailure : new Error(String(lastFailure));
 }
 
 /**

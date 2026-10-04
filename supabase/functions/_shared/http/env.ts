@@ -19,10 +19,13 @@ export function denoRuntime(): DenoLike {
 
 export function env(name: string): string | undefined {
   try {
-    return denoRuntime().env.get(name);
+    const value = denoRuntime().env.get(name);
+    if (value !== undefined) return value;
   } catch {
-    return undefined;
+    // Not on the Deno Edge Runtime (e.g. the Vercel adapter); fall through.
   }
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return proc?.env?.[name];
 }
 
 export function requireEnv(name: string): string {

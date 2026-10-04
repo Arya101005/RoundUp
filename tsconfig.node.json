@@ -15,5 +15,5 @@
     "noUnusedParameters": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "tailwind.config.ts", "scripts", "supabase/functions"]
+  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "tailwind.config.ts", "scripts", "api", "supabase/functions"]
 }
