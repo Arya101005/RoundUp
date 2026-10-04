@@ -2,6 +2,13 @@ import { z } from 'zod';
 import { createHandler, checkRateLimit } from '../_shared/http/handler.ts';
 import { ok, fail } from '../_shared/http/envelope.ts';
 import { sanitizeChatBody } from '../_shared/validation/sanitize.ts';
+import { isErrorCode } from '../_shared/errors/codes.ts';
+import { getEngine } from '../_shared/engine/registry.ts';
+import {
+  buildStepCtx,
+  loadGame,
+  loadPlayers,
+} from '../_shared/engine/pipeline.ts';
 
 const schema = z.object({
   roomId: z.string().uuid(),
@@ -68,9 +75,36 @@ export default createHandler('send-chat', { requireAuth: true }, async ({ client
     }
   }
 
-  // During a game, engine-specific chat rules apply (kind, channel, turn state).
-  // That validation runs inside game-action side effects; here we enforce the
-  // channel a player may write to and let engine.validateChat gate the text.
+  // In-game chat runs through the engine: per-phase turn locks decide who may
+  // speak and what kind of line this is (question / statement / chat).
+  let kind: 'chat' | 'question' | 'statement' = 'chat';
+  if (session) {
+    try {
+      const game = await loadGame(client, session.id);
+      if (game) {
+        const players = await loadPlayers(client, parsed.data.roomId, now);
+        const actor = players.find((p) => p.id === userId) ?? null;
+        const engine = getEngine(game.session.game_id);
+        if (engine.validateChat) {
+          const check = engine.validateChat(
+            game.state,
+            actor,
+            buildStepCtx(game.session, players, game.hostId, now, false),
+            clean.value,
+          );
+          if (!check.ok) {
+            const code = isErrorCode(check.code) ? check.code : 'INVALID_ACTION';
+            return fail(code, undefined, now);
+          }
+          kind = check.kind;
+        }
+      }
+    } catch (err) {
+      console.error('send-chat engine gate failed', err instanceof Error ? err.message : err);
+      return fail('SERVER_ERROR', undefined, now);
+    }
+  }
+
   const { data: inserted, error } = await client
     .from('chat_messages')
     .insert({
@@ -80,7 +114,7 @@ export default createHandler('send-chat', { requireAuth: true }, async ({ client
       team_id: channel === 'team' ? member.team_id : null,
       sender_id: userId,
       sender_name: member.display_name,
-      kind: 'chat',
+      kind,
       body: clean.value,
     })
     .select('*')

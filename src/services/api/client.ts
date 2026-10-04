@@ -3,7 +3,6 @@ import {
   ensureSession,
   supabaseConfigured,
   supabasePublishableKey,
-  supabaseUrl,
 } from '@/services/supabase/client';
 import { recordServerNow } from '@/services/clock';
 
@@ -17,14 +16,17 @@ export class ApiError extends Error {
 }
 
 /**
- * Edge function endpoint. Defaults to the Supabase Edge Functions gateway;
- * set VITE_FUNCTIONS_BASE (e.g. https://APP.vercel.app/api/functions) to use
- * the Vercel adapter instead. Same handlers, same auth, same responses.
+ * Where the function handlers are served. Defaults to the same-origin
+ * `/api/functions` adapter — the Vite dev/preview servers mount it locally
+ * and Vercel serves it from `api/functions/[name].ts` — so the app works out
+ * of the box. Set VITE_FUNCTIONS_BASE (e.g.
+ * `https://<ref>.supabase.co/functions/v1`) to call the Supabase gateway
+ * directly instead.
  */
 function functionsBase(): string {
   const override = import.meta.env.VITE_FUNCTIONS_BASE;
   if (override && override.length > 0) return override.replace(/\/$/, '');
-  return `${supabaseUrl}/functions/v1`;
+  return '/api/functions';
 }
 
 /** Calls an Edge Function and returns its parsed success payload. */

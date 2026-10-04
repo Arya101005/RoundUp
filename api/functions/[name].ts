@@ -8,12 +8,23 @@
  * handlers are written against.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import ws from 'ws';
 import createRoom from '../../supabase/functions/create-room/index.ts';
 import joinRoom from '../../supabase/functions/join-room/index.ts';
 import leaveRoom from '../../supabase/functions/leave-room/index.ts';
 import updateRoom from '../../supabase/functions/update-room/index.ts';
 import sendChat from '../../supabase/functions/send-chat/index.ts';
 import getSnapshot from '../../supabase/functions/get-snapshot/index.ts';
+import startGame from '../../supabase/functions/start-game/index.ts';
+import gameAction from '../../supabase/functions/game-action/index.ts';
+import gameTick from '../../supabase/functions/game-tick/index.ts';
+import sweeper from '../../supabase/functions/sweeper/index.ts';
+
+// Node < 22 has no global WebSocket; supabase-js needs one just to construct
+// its client. The service client never opens a socket on the server side.
+if (typeof globalThis.WebSocket === 'undefined') {
+  (globalThis as { WebSocket?: unknown }).WebSocket = ws;
+}
 
 const handlers: Record<string, (req: Request) => Response | Promise<Response>> = {
   'create-room': createRoom,
@@ -22,6 +33,10 @@ const handlers: Record<string, (req: Request) => Response | Promise<Response>> =
   'update-room': updateRoom,
   'send-chat': sendChat,
   'get-snapshot': getSnapshot,
+  'start-game': startGame,
+  'game-action': gameAction,
+  'game-tick': gameTick,
+  sweeper,
 };
 
 async function readBuffer(req: IncomingMessage): Promise<Buffer> {
