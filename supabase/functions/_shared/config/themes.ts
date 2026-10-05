@@ -103,6 +103,20 @@ export const themes: ThemeConfig[] = [
     aiPromptHints: 'Mainstream technology products and companies familiar to a general audience.',
   },
   {
+    id: 'sports',
+    label: 'Sports',
+    icon: 'BadgeSports',
+    supportedGames: ALL_GAMES,
+    categories: ['Players', 'Teams', 'Stadiums', 'Tournaments', 'Olympic sports'],
+    rankingCriteria: [
+      { id: 'goals', label: 'Career goals, most first', metricLabel: 'goals', direction: 'desc' },
+      { id: 'matches', label: 'Matches played, most first', metricLabel: 'matches', direction: 'desc' },
+    ],
+    auctionValueMetric: 'Market value (USD millions)',
+    auctionValueRange: { min: 1, max: 250 },
+    aiPromptHints: 'Athletes, teams and tournaments from any sport the room recognises.',
+  },
+  {
     id: 'cricket',
     label: 'Cricket',
     icon: 'Trophy',
@@ -112,9 +126,9 @@ export const themes: ThemeConfig[] = [
       { id: 'runs', label: 'Career international runs, highest first', metricLabel: 'runs', direction: 'desc' },
       { id: 'rating', label: 'ICC rating, highest first', metricLabel: 'rating points', direction: 'desc' },
     ],
-    auctionValueMetric: 'Career win share index (USD)',
-    auctionValueRange: { min: 100, max: 5000 },
-    aiPromptHints: 'Internationally recognised cricketers and tournaments.',
+    auctionValueMetric: 'Career prize earnings (USD thousands)',
+    auctionValueRange: { min: 50, max: 5000 },
+    aiPromptHints: 'Internationally recognised cricketers, teams and tournaments.',
   },
   {
     id: 'football',
@@ -123,10 +137,10 @@ export const themes: ThemeConfig[] = [
     supportedGames: ALL_GAMES,
     categories: ['Players', 'Clubs', 'Tournaments', 'Stadiums'],
     rankingCriteria: [
-      { id: 'market_value', label: 'Player market value, highest first', metricLabel: 'EUR millions', direction: 'desc' },
+      { id: 'market_value', label: 'Player market value, highest first', metricLabel: 'USD millions', direction: 'desc' },
       { id: 'goals', label: 'Career goals, most first', metricLabel: 'goals', direction: 'desc' },
     ],
-    auctionValueMetric: 'Market value (EUR millions)',
+    auctionValueMetric: 'Market value (USD millions)',
     auctionValueRange: { min: 1, max: 250 },
     aiPromptHints: 'Globally known footballers and clubs.',
   },
@@ -199,6 +213,19 @@ export const themes: ThemeConfig[] = [
     auctionValueMetric: 'Historical significance index (USD)',
     auctionValueRange: { min: 10, max: 10000 },
     aiPromptHints: 'Well-dated historical events and figures taught in schools worldwide.',
+  },
+  {
+    id: 'auction',
+    label: 'Auction',
+    icon: 'Gavel',
+    supportedGames: ALL_GAMES,
+    categories: ['Lots', 'Players', 'Bidders', 'Bidding'],
+    rankingCriteria: [
+      { id: 'value', label: 'Highest value won, most first', metricLabel: 'USD', direction: 'desc' },
+    ],
+    auctionValueMetric: 'Winning bid (USD)',
+    auctionValueRange: { min: 50, max: 50000 },
+    aiPromptHints: 'Well-known commodities and collectibles with published starting bids.',
   },
 ];
 

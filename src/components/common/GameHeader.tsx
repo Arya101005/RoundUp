@@ -1,7 +1,23 @@
 import type { ReactNode } from 'react';
-import type { GameMeta } from '@shared/games/types';
+import type { GameId, GameMeta } from '@shared/games/types';
 import { Timer } from '@/components/common/Timer';
 import { gameAccent, gameIcons } from '@/config/gameIcons';
+
+/** Per-game default turn duration (5 / 15 / 30 s), shown next to the phase
+ * label. Games that need no turn clock return undefined so the header just
+ * shows the round instead of a clock. Auction has none: its hard bid window
+ * (`bidSeconds`) is counted down inside the stage.
+ *
+ * Games: imposter, heads_up, charades, blind_ranking use these. Password's
+ * turn length comes from `clueSeconds`, and auction uses `bidSeconds`. */
+export const stageTurnSeconds: Record<GameId, number | undefined> = {
+  imposter: 15,
+  heads_up: 15,
+  password: undefined,
+  charades: 15,
+  blind_ranking: 20,
+  auction: undefined,
+};
 
 export interface GameHeaderProps {
   meta: GameMeta;
@@ -9,6 +25,9 @@ export interface GameHeaderProps {
   roundIndex: number;
   totalRounds: number;
   endsAt: string | null;
+  /** Whether a visible clock belongs in the header. Games with no per-phase
+   * clock (auction bid window lives in the stage) return false here. */
+  showTurnTimer: boolean;
   onTimerExpired?: () => void;
   right?: ReactNode;
 }
@@ -19,6 +38,7 @@ export function GameHeader({
   roundIndex,
   totalRounds,
   endsAt,
+  showTurnTimer,
   onTimerExpired,
   right,
 }: GameHeaderProps) {
@@ -53,7 +73,11 @@ export function GameHeader({
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {right}
-          <Timer endsAt={endsAt} onExpired={onTimerExpired} compact />
+          {showTurnTimer && endsAt !== null ? (
+            <Timer endsAt={endsAt} onExpired={onTimerExpired} compact />
+          ) : (
+            <span className="text-2xs text-muted tabular">{showTurnTimer ? 'Timer' : 'Round'}</span>
+          )}
         </div>
       </div>
     </header>

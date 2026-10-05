@@ -59,12 +59,75 @@ cp .env.example .env   # fill VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, 
 npm run build
 ```
 
-Deploy the `dist/` folder to Vercel or Cloudflare Pages with an SPA rewrite to
-`/index.html`. Set only the two `VITE_*` Supabase values there, then add the production
-URL to Supabase **Authentication → URL Configuration** and to `ALLOWED_ORIGINS`.
+Deploy the repository to Vercel with the SPA rewrite (`vercel.json`). The repo also
+ships `api/functions/[name].ts`, a Vercel Node function that serves every handler at
+`/api/functions/<name>` using the exact same code the Vite dev/preview servers mount,
+so the app works **without** deploying Supabase Edge Functions.
+
+### Vercel environment variables (Project → Settings → Environment Variables)
+
+Set these for **Production** (and Preview if you use it). Both the public and the
+server values are required in the app's own deployment:
+
+| Name | Used by | Notes |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | client + server | `https://<ref>.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | client | anon / publishable key |
+| `VITE_APP_URL` | client | the deployment URL, e.g. `https://your-app.vercel.app` |
+| `SUPABASE_SERVICE_ROLE_KEY` | server | **required** — every function returns 500 SERVER_ERROR without it |
+
+`SUPABASE_URL` is optional: `serviceClient()` falls back to `VITE_SUPABASE_URL`.
+
+`ALLOWED_ORIGINS` is optional. Leave it unset to allow every origin, or include the
+deployment URL. Same-origin browser requests are always allowed, so a stale
+`ALLOWED_ORIGINS` can no longer 403 the app against itself.
+
+`VITE_*` values are baked into the bundle at build time — change them, then redeploy.
+Server values are read per request. Because function bundling pulls in the server
+entries, always **Redeploy** after changing environment variables.
+
+### Verify the deployment
+
+Create a room in the browser at `/create`. If it fails, the browser DevTools console
+now prints a readable `[roundup:create-room] ...` line (the full stack trace is in the
+Vercel function logs). Then exercise the whole lifecycle over HTTP:
+
+```bash
+ROUNDUP_BASE_URL=https://your-app.vercel.app npm run e2e:http
+```
+
+Finally, add the production URL to Supabase **Authentication → URL Configuration**.
+
+### Cloudflare Pages (current deployment)
+
+The app is deployed to Cloudflare Pages as project `roundup` at
+**https://roundup-sgs.pages.dev**. Static assets are served from `dist/`, and the API
+is a Pages Function (`functions/api/functions/[name].ts`) that runs the *same*
+handlers as the Vercel adapter - no separate backend hosting is needed.
+
+```bash
+npm install -g wrangler
+wrangler login
+npm run build
+wrangler pages deploy dist --project-name roundup --branch main
+```
+
+Runtime configuration:
+
+- `wrangler.toml` sets `pages_build_output_dir = "dist"`, enables `nodejs_compat`, and
+  supplies the non-secret `SUPABASE_URL` var.
+- `SUPABASE_SERVICE_ROLE_KEY` is a Pages secret (set once; the value is never committed):
+  `wrangler pages secret put SUPABASE_SERVICE_ROLE_KEY --project-name roundup`
+- `public/_redirects` provides the SPA fallback, `public/_headers` the security headers
+  and CSP, and `public/_routes.json` limits Functions to `/api/functions/*`.
+- Workers have no `Deno.env`/`process.env`; the Pages adapter hands `context.env` to the
+  shared `env()` helper via `globalThis.__ROUNDUP_ENV__`.
+
+`VITE_*` values are baked into the bundle at build time - change them and rebuild with
+`npm run build` before redeploying.
 
 `.env` is gitignored; only `.env.example` is committed. The service role key and AI keys
-exist exclusively as Edge Function secrets - never in `VITE_*` variables.
+are server-only secrets - never in `VITE_*` variables.
 
 ## 6. Tests that need infrastructure
 

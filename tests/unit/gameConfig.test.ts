@@ -3,11 +3,12 @@ import { gameIds } from '@shared/games/types';
 import { gameRegistry } from '@shared/games/registry';
 import {
   defaultGameConfig,
+  defaultTurnSeconds,
   gameConfigSchemas,
   roundsBounds,
   validateGameConfig,
 } from '@shared/games/configs';
-import { themes, themeSupportsGame } from '@shared/config/themes';
+import { getTheme, themes, themeSupportsGame } from '@shared/config/themes';
 
 describe('game registry', () => {
   it('registers every game id with sane metadata', () => {
@@ -41,7 +42,7 @@ describe('game config schemas', () => {
   it('fills missing values with defaults', () => {
     const result = validateGameConfig('heads_up', {});
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.config.turnSeconds).toBe(60);
+    if (result.ok) expect(result.config.turnSeconds).toBe(defaultTurnSeconds.heads_up);
   });
 
   it('rejects out-of-range values', () => {
@@ -63,12 +64,29 @@ describe('game config schemas', () => {
 });
 
 describe('themes', () => {
-  it('covers all twelve themes with ranking criteria and auction metrics', () => {
-    expect(themes).toHaveLength(12);
+  it('gives every theme ranking criteria and an auction metric', () => {
+    // Sports and Cricket join the general-purpose bank, so this is a
+    // "every theme is complete" check rather than a fixed headcount.
+    expect(themes.length).toBeGreaterThanOrEqual(14);
     for (const theme of themes) {
       expect(theme.rankingCriteria.length).toBeGreaterThan(0);
       expect(theme.auctionValueMetric.length).toBeGreaterThan(0);
       expect(theme.supportedGames.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('prices every theme in USD', () => {
+    for (const theme of themes) {
+      expect(theme.auctionValueMetric, theme.id).toContain('USD');
+      for (const criterion of theme.rankingCriteria) {
+        expect(criterion.metricLabel, `${theme.id}.${criterion.id}`).not.toMatch(/EUR|GBP|INR/);
+      }
+    }
+  });
+
+  it('ships both sport themes', () => {
+    for (const id of ['sports', 'cricket']) {
+      expect(getTheme(id), id).toBeDefined();
     }
   });
 

@@ -7,6 +7,7 @@ import { RoomCode } from '@/components/common/RoomCode';
 import { ConnectionBanner } from '@/components/common/ConnectionBanner';
 import { EmptyState, ErrorState, LoadingState } from '@/components/common/States';
 import { useToast } from '@/components/common/toastContext';
+import type { LeaveRoomResult } from '@/services/api/rooms';
 import { ChatPanel } from '@/components/chat/ChatPanel';
 import { LobbyPlayers } from '@/components/lobby/LobbyPlayers';
 import { LobbySettings } from '@/components/lobby/LobbySettings';
@@ -20,7 +21,7 @@ import {
 } from '@/services/api/rooms';
 import { ApiError } from '@/services/api/client';
 import { gameRegistry } from '@shared/games/registry';
-import { activePlayers, startBlockReason } from '@/utils/room';
+import { activePlayers, clearStoredRoomCode, startBlockReason, storeRoomCode } from '@/utils/room';
 import { copyText } from '@/utils/format';
 import { routes } from '@/config/routes';
 
@@ -53,12 +54,18 @@ export function RoomPage() {
     return startBlockReason({ room, players, meta, hostId: room.hostId });
   }, [room, players, meta]);
 
+  // Remember this room so the game/results routes can resolve it after the
+  // shared room store is reset on unmount.
+  useEffect(() => {
+    if (room?.code) storeRoomCode(room.code);
+  }, [room?.code]);
+
   // Mid-game entry: route into the game session instead of the lobby.
   useEffect(() => {
     if (!snapshot) return;
     const session = snapshot.session;
     if (session && snapshot.room.status !== 'lobby' && snapshot.room.status !== 'closed') {
-      navigate(routes.game(session.id), { replace: true });
+      navigate(routes.game(session.id), { replace: true, state: { roomCode: snapshot.room.code } });
     }
   }, [snapshot, navigate]);
 
@@ -82,7 +89,7 @@ export function RoomPage() {
     setBusy(true);
     try {
       const { sessionId } = await startGame(room.id);
-      navigate(routes.game(sessionId));
+      navigate(routes.game(sessionId), { state: { roomCode: room.code } });
     } catch (err) {
       toast('error', 'Could not start the game', err instanceof ApiError ? err.message : undefined);
       setBusy(false);
@@ -92,10 +99,16 @@ export function RoomPage() {
   const handleLeave = useCallback(async () => {
     if (!room) return;
     try {
-      await leaveRoom(room.id);
+      const res: LeaveRoomResult = await leaveRoom(room.id);
+      if (res.roomLeft) {
+        toast('success', 'Room deleted', 'All data for this room was purged when the last player left.');
+      } else if (res.status === 'closed') {
+        toast('info', 'Room closed', 'The room is now idle and will be cleared by the retention sweep.');
+      }
     } catch {
       // Leaving is best-effort; navigate regardless.
     }
+    clearStoredRoomCode();
     navigate(routes.home, { replace: true });
   }, [room, navigate]);
 

@@ -182,7 +182,8 @@ function scoreRound(st: RankingState): void {
 
 function nextRound(state: Record<string, unknown>, ctx: StepCtx): Transition {
   const st = asState(state);
-  scoreRound(st);
+  // Scoring already happened on the REVEAL -> RESULTS tick (see `tick`).
+  // Adding it here counted every round except the last one twice.
   st.roundIndex += 1;
   const setup = activeSetup(st);
   st.current = {
@@ -326,15 +327,18 @@ export const blindRankingEngine: GameEngine = {
     }
 
     const list = st.current.placed[actor.id] ?? [];
-    const maxPos = list.length;
     const position = Number(action.payload.position);
-    if (!Number.isInteger(position) || position < 0 || position > maxPos) {
+    if (!Number.isInteger(position) || position < 0 || position > list.length) {
       return failResult('INVALID_ACTION');
     }
+    // Atomic placement: the item lands *in the chosen slot* and everything below
+    // it shifts one rank down. It is an insert into the list, never a reorder
+    // of the whole ranking, so a refresh keeps the spot the player picked.
     const next = [...list];
     next.splice(position, 0, item);
-    st.current.placed[actor.id] = next;
-    st.current.placedCount[actor.id] = next.length;
+    const placedNow = next.filter((x): x is string => typeof x === 'string');
+    st.current.placed[actor.id] = placedNow;
+    st.current.placedCount[actor.id] = placedNow.length;
     st.pub.placedCounts = { ...st.current.placedCount };
 
     const events = [ev('ITEM_PLACED', { actorId: actor.id, actionId: action.actionId })];

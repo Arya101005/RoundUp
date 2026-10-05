@@ -12,10 +12,12 @@ export const gameRegistry: Record<GameId, GameMeta> = {
     minPlayers: 3,
     maxPlayers: 12,
     evenPlayersOnly: false,
-    description: 'One player is the imposter. Discuss, vote, and catch them before the round ends.',
+    timer: true,
+    description: 'One player is the imposter. Discuss in turns, then vote for the player you suspect.',
     rulesSummary: [
       'Everyone sees the same secret word except the imposter.',
-      'Discuss, then vote for the player you suspect.',
+      'Turn-based discussion: each player speaks in turn, 15 s a time.',
+      'The host ends discussion, then the room votes for the imposter.',
       'A strict plurality is caught; ties catch nobody.',
       'A caught imposter can still guess the secret word.',
     ],
@@ -28,11 +30,11 @@ export const gameRegistry: Record<GameId, GameMeta> = {
     minPlayers: 3,
     maxPlayers: 10,
     evenPlayersOnly: false,
-    description:
-      'Guess your word without seeing it. Everyone else knows your word and answers your questions.',
+    timer: true,
+    description: 'Guess your word without seeing it. Everyone else knows your word and answers your questions.',
     rulesSummary: [
       'Each player has a private word they cannot see.',
-      'Ask yes/no questions and use the answers to guess.',
+      'Ask yes/no questions in the chat, then guess.',
       'Wrong guesses cost points; the fastest solvers earn bonuses.',
     ],
     rounds: { min: 1, max: 10, default: 3 },
@@ -44,6 +46,7 @@ export const gameRegistry: Record<GameId, GameMeta> = {
     minPlayers: 4,
     maxPlayers: 10,
     evenPlayersOnly: true,
+    timer: true,
     description: 'Two teams. One clue giver, one word. Give a single-word clue and guess it.',
     rulesSummary: [
       'Two teams alternate word turns.',
@@ -60,6 +63,7 @@ export const gameRegistry: Record<GameId, GameMeta> = {
     minPlayers: 4,
     maxPlayers: 10,
     evenPlayersOnly: true,
+    timer: true,
     description:
       'One performer acts it out, teammates guess. Played over your group video call or in person.',
     rulesSummary: [
@@ -76,6 +80,7 @@ export const gameRegistry: Record<GameId, GameMeta> = {
     minPlayers: 2,
     maxPlayers: 12,
     evenPlayersOnly: false,
+    timer: true,
     description:
       'Items arrive one at a time. Place each into your ranking without knowing what comes next.',
     rulesSummary: [
@@ -92,10 +97,13 @@ export const gameRegistry: Record<GameId, GameMeta> = {
     minPlayers: 2,
     maxPlayers: 10,
     evenPlayersOnly: false,
+    // Auction's clock is the hard bid window inside the bidding phase, shown
+    // by the stage itself, so the header shows "Round" rather than a clock.
+    timer: false,
     description: 'Bid your budget on hidden-value items. Best collection of value wins.',
     rulesSummary: [
       'Everyone starts with the same public budget.',
-      'Items are sold one at a time in live bidding; late bids extend the clock.',
+      'Items are sold one at a time; the highest bid before the window closes wins the lot.',
       'Reference values are revealed at the end and decide the score.',
     ],
     rounds: { min: 1, max: 5, default: 1 },

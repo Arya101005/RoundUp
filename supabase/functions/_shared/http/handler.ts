@@ -47,6 +47,23 @@ function originAllowed(origin: string | null): boolean {
   return allowed.length === 0 || allowed.includes(origin);
 }
 
+/**
+ * True when the Origin matches the host this request was served from. The Vercel
+ * adapter rebuilds the Request URL from the incoming Host header, so a browser
+ * calling its own deployment origin (`VITE_FUNCTIONS_BASE` unset) is same-origin.
+ *
+ * This keeps room creation working in production even when ALLOWED_ORIGINS is
+ * set for a different host: we never want the app's own origin to 403 itself.
+ */
+function isSameOrigin(req: Request, origin: string | null): boolean {
+  if (!origin) return false;
+  try {
+    return new URL(origin).host === new URL(req.url).host;
+  } catch {
+    return false;
+  }
+}
+
 /** A rejection the auth service made about the token itself (4xx, not 429). */
 function isDefinitiveAuthRejection(error: unknown): boolean {
   const status = (error as { status?: number } | null)?.status;
@@ -161,7 +178,7 @@ export function createHandler<T>(
         headers,
       });
     }
-    if (!originAllowed(origin)) {
+    if (!originAllowed(origin) && !isSameOrigin(req, origin)) {
       return new Response(JSON.stringify(fail('UNAUTHORIZED')), { status: 403, headers });
     }
 

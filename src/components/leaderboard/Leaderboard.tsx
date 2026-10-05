@@ -24,6 +24,12 @@ export function Leaderboard({
     row: rows.find((x) => x.id === r.id),
   }));
 
+  // Per-round columns are only meaningful once real per-round scores are
+  // supplied. Rendering them empty shows a misleading column of zeros next to
+  // the real total, so fall back to totals only.
+  const hasPerRound = rows.some((r) => r.perRound.length > 0);
+  const roundCols = hasPerRound ? Math.max(roundCount, ...rows.map((r) => r.perRound.length)) : 0;
+
   return (
     <section aria-label={title} className="overflow-hidden rounded-lg border border-line bg-surface">
       <h2 className="border-b border-line px-4 py-3 font-display text-sm font-semibold uppercase tracking-wider text-muted">
@@ -39,7 +45,7 @@ export function Leaderboard({
               <th scope="col" className="px-3 py-2 font-medium">
                 Player
               </th>
-              {Array.from({ length: roundCount }, (_, i) => (
+              {Array.from({ length: roundCols }, (_, i) => (
                 <th key={i} scope="col" className="px-3 py-2 text-right font-medium">
                   R{i + 1}
                 </th>
@@ -82,7 +88,7 @@ export function Leaderboard({
                     </span>
                   </span>
                 </td>
-                {Array.from({ length: roundCount }, (_, r) => (
+                {Array.from({ length: roundCols }, (_, r) => (
                   <td key={r} className="px-3 py-2.5 text-right text-muted tabular">
                     {entry.row ? formatScore(entry.row.perRound[r] ?? 0) : '-'}
                   </td>

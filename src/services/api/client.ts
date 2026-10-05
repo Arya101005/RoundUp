@@ -29,22 +29,42 @@ function functionsBase(): string {
   return '/api/functions';
 }
 
+/**
+ * Every failed function call is logged to the browser DevTools console with a
+ * `[roundup:<fn>]` prefix. In production (Vercel) the server-side stack trace
+ * lives in the platform logs, so this is the only copy a player can see — it
+ * makes room-creation and in-game failures diagnosable from the browser alone.
+ */
+function logFailure(name: string, fields: Record<string, unknown>): void {
+  const parts = [
+    fields.status !== undefined ? `HTTP ${String(fields.status)}` : null,
+    typeof fields.code === 'string' ? fields.code : null,
+    typeof fields.message === 'string' ? fields.message : null,
+    typeof fields.reason === 'string' ? fields.reason : null,
+  ].filter((p): p is string => p !== null);
+  // One readable line, plus the full object for DevTools inspection.
+  console.error(`[roundup:${name}] ${parts.join(' | ') || 'call failed'}`, fields);
+}
+
 /** Calls an Edge Function and returns its parsed success payload. */
 export async function invokeFunction<T extends object>(
   name: string,
   body: Record<string, unknown>,
 ): Promise<T> {
   if (!supabaseConfigured) {
+    logFailure(name, { reason: 'not-configured', message: errorMessage('NOT_CONFIGURED') });
     throw new ApiError('NOT_CONFIGURED', errorMessage('NOT_CONFIGURED'));
   }
   const token = await ensureSession();
   if (!token) {
+    logFailure(name, { reason: 'no-session', message: 'Anonymous sign-in returned no session.' });
     throw new ApiError('UNAUTHORIZED', errorMessage('UNAUTHORIZED'));
   }
 
+  const url = `${functionsBase()}/${name}`;
   let res: Response;
   try {
-    res = await fetch(`${functionsBase()}/${name}`, {
+    res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,7 +73,12 @@ export async function invokeFunction<T extends object>(
       },
       body: JSON.stringify(body),
     });
-  } catch {
+  } catch (err) {
+    logFailure(name, {
+      url,
+      reason: 'network',
+      message: err instanceof Error ? err.message : String(err),
+    });
     throw new ApiError('NETWORK', 'Network error. Check your connection and try again.');
   }
 
@@ -61,6 +86,7 @@ export async function invokeFunction<T extends object>(
   try {
     payload = await res.json();
   } catch {
+    logFailure(name, { url, reason: 'non-json', status: res.status });
     throw new ApiError('SERVER_ERROR', errorMessage('SERVER_ERROR'));
   }
 
@@ -71,8 +97,15 @@ export async function invokeFunction<T extends object>(
   if (!res.ok || envelope.ok !== true) {
     const code = envelope.error?.code;
     if (code && typeof code === 'string') {
+      logFailure(name, {
+        url,
+        status: res.status,
+        code,
+        message: envelope.error?.message ?? errorMessage(code),
+      });
       throw new ApiError(code as ErrorCode, envelope.error?.message ?? errorMessage(code));
     }
+    logFailure(name, { url, status: res.status, code: 'SERVER_ERROR', payload });
     throw new ApiError('SERVER_ERROR', errorMessage('SERVER_ERROR'));
   }
 

@@ -71,6 +71,7 @@ export function mapSession(s: any | null): SessionSummary | null {
     roomId: s.room_id,
     gameId: s.game_id,
     phase: s.phase,
+    phaseId: s.phase_id,
     phaseEndsAt: s.phase_ends_at ?? null,
     roundIndex: s.round_index,
     totalRounds: s.total_rounds,

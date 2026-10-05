@@ -38,6 +38,13 @@ export const seedWords: Record<string, Record<string, string[]>> = {
     Software: ['Windows', 'Photoshop', 'Spotify', 'Skype', 'Chrome', 'Excel', 'Linux', 'Firefox'],
     Inventions: ['Telephone', 'Television', 'Radio', 'Printing press', 'Light bulb', 'Bicycle', 'Airplane', 'Compass'],
   },
+  sports: {
+    Players: ['Usain Bolt', 'Michael Jordan', 'Serena Williams', 'Novak Djokovic', 'Lewis Hamilton', 'Simone Biles', 'Muhammad Ali', 'Federer'],
+    Teams: ['Lakers', 'Warriors', 'Barcelona', 'India', 'Chiefs', 'Yankees', 'Real Madrid', 'All Blacks'],
+    Stadiums: ['Wembley', 'Madison Square Garden', 'Maracanã', 'MCG', 'Wankhede', 'Santiago Bernabéu', 'Lord’s', 'Melbourne Arena'],
+    Tournaments: ['World Cup', 'Olympics', 'Super Bowl', 'Wimbledon', 'ICC Champions Trophy', 'Premier League', 'Tour de France', 'Grand Slam'],
+    'Olympic sports': ['Athletics', 'Swimming', 'Gymnastics', 'Rowing', 'Cycling', 'Boxing', 'Judo', 'Weightlifting'],
+  },
   cricket: {
     Players: ['Kohli', 'Smith', 'Williamson', 'Root', 'Warner', 'Babar', 'Rohit', 'Ponting'],
     Teams: ['India', 'Australia', 'England', 'Pakistan', 'South Africa', 'New Zealand', 'West Indies', 'Sri Lanka'],
@@ -107,6 +114,10 @@ export const seedRankings: Record<string, Record<string, string[]>> = {
     market_cap: ['Apple', 'Microsoft', 'Google', 'Amazon', 'Tesla', 'Samsung', 'IBM', 'Intel', 'Sony', 'Nokia'],
     founded: ['Nokia', 'IBM', 'Samsung', 'Sony', 'Intel', 'Microsoft', 'Apple', 'Amazon', 'Google', 'Tesla'],
   },
+  sports: {
+    goals: ['Ronaldo', 'Messi', 'Neymar', 'Mbappé', 'Salah', 'Haaland', 'Zidane', 'Cruyff'],
+    matches: ['Carson', 'Pele', 'Federer', 'Dhoni', 'Ronaldo', 'Messi', 'Jordan', 'Bradman'],
+  },
   cricket: {
     runs: ['Tendulkar', 'Kohli', 'Root', 'Rohit', 'Warner', 'Williamson', 'Smith', 'Babar'],
     rating: ['Root', 'Smith', 'Williamson', 'Kohli', 'Babar', 'Rohit', 'Warner', 'Head'],
@@ -166,6 +177,11 @@ export const seedAuctionItems: Record<string, [string, number][]> = {
     ['Echo Dot', 50], ['Kindle', 100], ['Smartwatch', 399], ['Gaming console', 499],
     ['Headphones', 549], ['Tablet', 1099], ['Phone', 1199], ['Monitor', 1499],
     ['Laptop', 2499], ['VR headset', 3499], ['Workstation', 4999], ['Robot kit', 250],
+  ],
+  sports: [
+    ['Local club player', 1], ['Youth prospect', 8], ['Reserve goalkeeper', 15], ['Backup defender', 30],
+    ['Regular starter', 60], ['Key player', 100], ['Star player', 160], ['Captain', 200],
+    ['World champion', 240], ['Legend of the sport', 250], ['Coaching staff', 40], ['Team kit supplier', 12],
   ],
   cricket: [
     ['Reserve batter', 150], ['Night watchman', 200], ['Spinner', 1100], ['Opening bowler', 1400],

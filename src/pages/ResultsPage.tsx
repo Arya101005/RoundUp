@@ -8,6 +8,7 @@ import { getSnapshot } from '@/services/api/rooms';
 import { ApiError } from '@/services/api/client';
 import type { Snapshot } from '@/types/domain';
 import { gameRegistry } from '@shared/games/registry';
+import { getStoredRoomCode } from '@/utils/room';
 import { routes } from '@/config/routes';
 import { useRoomStore } from '@/store/roomStore';
 
@@ -20,7 +21,7 @@ export function ResultsPage() {
   const [loading, setLoading] = useState(storeSnapshot === null);
   const [error, setError] = useState<string | null>(null);
 
-  const code = snapshot?.room.code ?? storeSnapshot?.room.code;
+  const code = snapshot?.room.code ?? storeSnapshot?.room.code ?? getStoredRoomCode();
   const myUserId = useRoomStore((s) => s.myUserId);
 
   useEffect(() => {

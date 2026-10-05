@@ -36,8 +36,18 @@ export async function joinRoom(
   return { room: mapRoom(res.room), playerId: res.playerId };
 }
 
-export async function leaveRoom(roomId: string): Promise<void> {
-  await invokeFunction('leave-room', { roomId });
+export type LeaveRoomResult = {
+  /** `true` when the calling player is no longer in the room. */
+  left: boolean;
+  /** `true` when this player caused the room to be deleted (was the last member). */
+  roomLeft: boolean;
+  /** The room status after the leave: 'closed' (retention) or 'deleted' (last member). */
+  status: 'lobby' | 'preparing' | 'in_game' | 'closed' | 'deleted';
+};
+
+export async function leaveRoom(roomId: string): Promise<LeaveRoomResult> {
+  const res = await invokeFunction<LeaveRoomResult>('leave-room', { roomId });
+  return res;
 }
 
 export interface UpdateRoomInput {

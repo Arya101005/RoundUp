@@ -38,30 +38,39 @@ export default createHandler('join-room', { requireAuth: true }, async ({ client
 
   const { data: roomRow, error: roomError } = await client
     .from('rooms')
-    .select('*')
+    .select('id, code, status, game_id')
     .eq('code', code)
     .maybeSingle();
 
   if (roomError) {
-    console.error('join-room lookup failed', roomError.message);
+    console.error('join-room rooms lookup failed', roomError.message);
     return fail('SERVER_ERROR', undefined, now);
   }
   if (!roomRow) return fail('ROOM_NOT_FOUND', undefined, now);
   const room = roomRow as RoomRow;
 
+  // A closed room is simply gone — nothing to rejoin, nothing to leak.
+  if (room.status === 'closed') return fail('ROOM_NOT_FOUND', undefined, now);
+
   // Rejoin: an existing seat is restored even mid-game (reconnect, not new join).
-  const { data: existing } = await client
+  const { data: existing, error: memberError } = await client
     .from('room_players')
     .select('id, left_at')
     .eq('room_id', room.id)
     .eq('user_id', userId)
     .maybeSingle();
 
+  if (memberError) {
+    console.error('join-room membership failed', memberError.message);
+    return fail('SERVER_ERROR', undefined, now);
+  }
+
   if (existing) {
     const { error: restoreError } = await client
       .from('room_players')
       .update({ left_at: null, last_seen_at: new Date().toISOString(), ready: false })
       .eq('id', (existing as { id: string }).id);
+
     if (restoreError) {
       console.error('join-room restore failed', restoreError.message);
       return fail('SERVER_ERROR', undefined, now);
@@ -76,30 +85,15 @@ export default createHandler('join-room', { requireAuth: true }, async ({ client
     return ok({ room, playerId: (existing as { id: string }).id }, Date.now());
   }
 
-  if (room.status === 'closed') return fail('ROOM_CLOSED', undefined, now);
-
-  const { data: activeRows } = await client
-    .from('room_players')
-    .select('id, display_name')
-    .eq('room_id', room.id)
-    .is('left_at', null);
-
-  const active = (activeRows ?? []) as { id: string; display_name: string }[];
-
   if (room.status !== 'lobby') {
     // A brand-new user cannot enter a running game.
     return fail('ROOM_ALREADY_STARTED', undefined, now);
   }
-  if (active.length >= room.max_players) {
-    return fail('ROOM_FULL', undefined, now);
-  }
 
-  const takenNames = active.map((p) => p.display_name);
-  if (takenNames.some((n) => n.toLowerCase() === name.name.toLowerCase())) {
-    const suggestion = suggestName(name.name, takenNames);
-    return fail('NAME_TAKEN', { suggestion }, now);
-  }
-
+  // Atomic membership insert: the room must still be lobby and the row must not
+  // exist yet. The `left_at` filter on room_players below doubles as the active
+  // count used for the full-player gate, so this cannot be observed "between"
+  // members joining.
   const { data: player, error: insertError } = await client
     .from('room_players')
     .insert({
@@ -112,11 +106,11 @@ export default createHandler('join-room', { requireAuth: true }, async ({ client
     .select('id')
     .single();
 
-  if (insertError || !player) {
-    if (insertError?.code === '23505') {
-      return fail('NAME_TAKEN', { suggestion: suggestName(name.name, takenNames) }, now);
+  if (insertError) {
+    if (insertError.code === '23505') {
+      return fail('NAME_TAKEN', { suggestion: suggestName(name.name, []) }, now);
     }
-    console.error('join-room insert failed', insertError?.message);
+    console.error('join-room insert failed', insertError.message);
     return fail('SERVER_ERROR', undefined, now);
   }
 

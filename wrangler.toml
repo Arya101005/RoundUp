@@ -1,0 +1,14 @@
+# Cloudflare Pages configuration.
+# Docs: https://developers.cloudflare.com/pages/configuration/
+name = "roundup"
+compatibility_date = "2025-01-01"
+# supabase-js expects a Node-ish runtime (process/Buffer).
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+# Public, non-secret runtime values for the Pages Functions (env() falls back to
+# VITE_SUPABASE_URL, but Pages never sees the build-time VITE_* values).
+# The service role key is a SECRET and must never live here:
+#   wrangler pages secret put SUPABASE_SERVICE_ROLE_KEY --project-name roundup
+[vars]
+SUPABASE_URL = "https://jqdwldqexpjsprwmzqdm.supabase.co"

@@ -51,6 +51,8 @@ export interface SessionSummary {
   roomId: string;
   gameId: GameId;
   phase: string;
+  /** Opaque per-phase id used to guard ticks against superseded phases. */
+  phaseId: string;
   phaseEndsAt: string | null;
   roundIndex: number;
   totalRounds: number;

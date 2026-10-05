@@ -269,6 +269,10 @@ function advanceTurn(
   }
   st.current.speakerIndex = nextSeat;
   const speakerId = st.order[nextSeat] ?? null;
+  // Publish the new speaker: the stage renders
+  // `pub.speakerId`, so this is what keeps "who is speaking" correct on every
+  // clockwise step.
+  st.pub.speakerId = speakerId;
   // Same phase, new phase_id: stale ticks and turns for the old seat no-op.
   const phaseId = randomUUID();
   return go(state, {
@@ -280,7 +284,7 @@ function advanceTurn(
       ev('TURN_ENDED', { actorId: prevSpeaker }),
       ev('TURN_STARTED', { actorId: speakerId }),
     ],
-    systemMessages: speakerId ? [] : [],
+    systemMessages: [],
   });
 }
 
@@ -426,19 +430,25 @@ export const imposterEngine: GameEngine = {
       hostId: ctx.hostId,
       roundIndex: 0,
       totalRounds: ctx.totalRounds,
-      mode: (ctx.config.discussionMode as 'free_chat' | 'turn_based') ?? 'free_chat',
+      // The room flow is clue-round first: a random starting player speaks,
+      // turns run clockwise, then everyone votes. `turn_based` is therefore
+      // the platform default; `free_chat` is opt-in from lobby settings.
+      mode: (ctx.config.discussionMode as 'free_chat' | 'turn_based') ?? 'turn_based',
       discussionSeconds: (ctx.config.discussionSeconds as number) ?? 180,
-      turnSeconds: (ctx.config.turnSeconds as number) ?? 25,
-      laps: (ctx.config.laps as number) ?? 2,
+      turnSeconds: (ctx.config.turnSeconds as number) ?? 15,
+      // One clue per player by default (the flow diagram's CLUE ROUND).
+      laps: (ctx.config.laps as number) ?? 1,
       votingSeconds: (ctx.config.votingSeconds as number) ?? 45,
       imposterSeesTheme: (ctx.config.imposterSeesTheme as boolean) ?? true,
       imposterGuessEnabled: (ctx.config.imposterGuessEnabled as boolean) ?? true,
       guessSeconds: (ctx.config.guessSeconds as number) ?? 30,
       themeLabel: ctx.themeLabel,
       rounds,
-      current: freshRoundData(first.speakerStart),
       history: [],
       stats: {},
+      // The first speaker is random (SELECT RANDOM STARTING PLAYER), and turns
+      // then run clockwise from there.
+      current: freshRoundData(first.speakerStart),
       finished: false,
       pub,
     };
@@ -513,10 +523,14 @@ export const imposterEngine: GameEngine = {
         if (st.mode !== 'turn_based') return failResult('INVALID_ACTION');
         const speakerId = st.order[st.current.speakerIndex];
         if (!actor || actor.id !== speakerId) return failResult('NOT_YOUR_TURN');
-        return {
-          ok: true,
-          transition: advanceTurn(state, ctx, []),
-        };
+        // Ending a turn *consumes* it: `advanceTurn` counts the turn, moves
+        // clockwise and ends the clue round once every player has spoken.
+        // (Not a bare speaker swap: the turn must be counted, or a room where
+        // everyone presses this button would loop between two players forever.)
+        const next: Transition = advanceTurn(state, ctx, [
+          ev('TURN_ENDED', { actorId: actor.id, actionId: action.actionId }),
+        ]);
+        return { ok: true, transition: next };
       }
 
       case 'guess': {
@@ -579,7 +593,16 @@ export const imposterEngine: GameEngine = {
 
       case DISCUSSION: {
         if (st.mode === 'turn_based') return advanceTurn(state, ctx, []);
-        return toVoting(state, ctx, []);
+        // Free chat: the whole discussion is one phase. When its deadline
+        // passes the host takes over, so the tick just re-arms a phase id
+        // rather than rotating anyone.
+        const dl = transition(DISCUSSION, TABLE, DISCUSSION, ctx.now, null);
+        return go(state, {
+          phase: dl.phase,
+          phaseId: dl.phaseId,
+          phaseEndsAt: null,
+          systemMessages: ['The discussion window closed; the host can move on to voting.'],
+        });
       }
 
       case VOTING:

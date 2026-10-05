@@ -1,6 +1,7 @@
 /**
- * Auction engine (Section 10.6): live bidding with anti-snipe extensions,
- * public budgets, hidden reference values revealed only at REVEAL.
+ * Auction engine (Section 10.6): live bidding inside a single hard bid
+ * window (a bid never extends it), public budgets, hidden reference values
+ * revealed only at REVEAL.
  * Values are scaled at initialize so the pool totals ~1.6x one budget.
  */
 import type {
@@ -33,8 +34,6 @@ const TABLE: Record<string, readonly string[]> = {
 const INTRO_S = 3;
 const REVEAL_S = 10;
 const RESULTS_S = 10;
-const EXTENSION_MS = 5_000;
-const MAX_EXTENSIONS = 10;
 
 export const auctionScoring = {
   /** acquired_value * 0.05 * (distinctCategoriesWon - 1), min 0. */
@@ -58,13 +57,12 @@ interface AuctionState {
   roundIndex: number;
   totalRounds: number;
   startingBudget: number;
-  auctionSeconds: number;
+  bidSeconds: number;
   minIncrement: number;
   rounds: AuctionRound[];
   current: {
     itemIndex: number;
     high: { bidderId: string; amount: number } | null;
-    extensions: number;
     spent: Record<string, number>;
     wonItems: Record<string, { name: string; value: number }[]>;
     sold: { name: string; winnerId: string | null; amount: number }[];
@@ -123,6 +121,7 @@ function budgetsOf(st: AuctionState): Record<string, number> {
 
 function refreshBidState(st: AuctionState): void {
   const item = activeItem(st);
+  st.pub.bidSeconds = st.bidSeconds;
   st.pub.high = st.current.high;
   st.pub.minNextBid = item
     ? st.current.high
@@ -171,7 +170,6 @@ function sellOrReveal(
 
   st.current.itemIndex += 1;
   st.current.high = null;
-  st.current.extensions = 0;
 
   if (st.current.itemIndex < round.items.length) {
     const next = round.items[st.current.itemIndex] as AuctionItem;
@@ -233,7 +231,6 @@ function nextRound(state: Record<string, unknown>, ctx: StepCtx): Transition {
   st.current = {
     itemIndex: 0,
     high: null,
-    extensions: 0,
     spent: {},
     wonItems: {},
     sold: [],
@@ -294,6 +291,7 @@ export const auctionEngine: GameEngine = {
     const pub: Record<string, unknown> = {
       totalScores: {},
       budgets,
+      bidSeconds: (ctx.config.bidSeconds as number) ?? 30,
       itemIndex: 0,
       item: { name: first.name },
       high: null,
@@ -309,14 +307,13 @@ export const auctionEngine: GameEngine = {
       roundIndex: 0,
       totalRounds: ctx.totalRounds,
       startingBudget,
-      auctionSeconds: (ctx.config.auctionSeconds as number) ?? 20,
+      bidSeconds: (ctx.config.bidSeconds as number) ?? 30,
       minIncrement,
       rounds,
       current: {
         itemIndex: 0,
         high: null,
-        extensions: 0,
-        spent: {},
+            spent: {},
         wonItems: {},
         sold: [],
         scoresThisRound: null,
@@ -379,24 +376,16 @@ export const auctionEngine: GameEngine = {
       }),
     ];
 
-    // Anti-sniping: a bid in the final 5 s resets the clock (capped).
-    let phaseId = ctx.phaseId;
-    let phaseEndsAt = ctx.phaseEndsAt;
-    const remainingMs = (ctx.phaseEndsAt ?? ctx.now) - ctx.now;
-    if (remainingMs < EXTENSION_MS && st.current.extensions < MAX_EXTENSIONS) {
-      st.current.extensions += 1;
-      phaseEndsAt = ctx.now + EXTENSION_MS;
-      const dl = transition(BIDDING, TABLE, BIDDING, ctx.now, null);
-      phaseId = dl.phaseId;
-      phaseEndsAt = ctx.now + EXTENSION_MS;
-    }
-
+    // The bid window is a hard, single countdown: a bid NEVER re-arms it.
+    // `phaseId` and `phaseEndsAt` are left exactly as the server set them, so
+    // the lot always sells `bidSeconds` after bidding opened, no matter how
+    // many bids land inside it.
     return {
       ok: true,
       transition: go(state, {
         phase: BIDDING,
-        phaseId,
-        phaseEndsAt,
+        phaseId: ctx.phaseId,
+        phaseEndsAt: ctx.phaseEndsAt,
         events,
       }),
     };
@@ -408,7 +397,7 @@ export const auctionEngine: GameEngine = {
 
     switch (ctx.currentPhase) {
       case INTRO: {
-        const dl = transition(INTRO, TABLE, BIDDING, ctx.now, st.auctionSeconds);
+        const dl = transition(INTRO, TABLE, BIDDING, ctx.now, st.bidSeconds);
         return go(state, {
           phase: dl.phase,
           phaseId: dl.phaseId,
@@ -416,8 +405,16 @@ export const auctionEngine: GameEngine = {
         });
       }
 
-      case BIDDING:
+      case BIDDING: {
+        // The hard clock is the server's `phase_ends_at` for this bidding
+        // phase: a bid never extends it, and any tick past the deadline sells
+        // the lot even if a player is still typing a bid. A tick while the
+        // window is still open is a no-op, so a stray poll can never cut the
+        // bidding short.
+        const remaining = (ctx.phaseEndsAt ?? ctx.now) - ctx.now;
+        if (remaining > 0) return null;
         return sellOrReveal(state, ctx);
+      }
 
       case REVEAL: {
         const dl = transition(REVEAL, TABLE, RESULTS, ctx.now, RESULTS_S);

@@ -17,13 +17,24 @@ export function denoRuntime(): DenoLike {
   return runtime;
 }
 
+/**
+ * Bindings captured from a Cloudflare Pages Function's `context.env`.
+ * Workers have neither `Deno.env` nor a populated `process.env`, so the Pages
+ * adapter parks its bindings here before invoking a handler.
+ */
+function bindingEnv(): Record<string, unknown> | undefined {
+  return (globalThis as { __ROUNDUP_ENV__?: Record<string, unknown> }).__ROUNDUP_ENV__;
+}
+
 export function env(name: string): string | undefined {
   try {
     const value = denoRuntime().env.get(name);
     if (value !== undefined) return value;
   } catch {
-    // Not on the Deno Edge Runtime (e.g. the Vercel adapter); fall through.
+    // Not on the Deno Edge Runtime (e.g. the Vercel/Pages adapter); fall through.
   }
+  const bound = bindingEnv()?.[name];
+  if (typeof bound === 'string' && bound.length > 0) return bound;
   const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
   return proc?.env?.[name];
 }

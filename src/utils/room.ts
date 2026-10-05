@@ -54,6 +54,40 @@ export function storeName(name: string): void {
   }
 }
 
+/* ---- Stored room code ---- */
+
+const ROOM_KEY = 'roundup.roomCode';
+
+/**
+ * The last room this browser entered. The game and results routes only carry a
+ * `sessionId`, but the snapshot API is keyed by room code, and the shared room
+ * store is cleared when leaving the lobby — so the code is persisted here to
+ * survive that transition (and a page refresh / deep link).
+ */
+export function getStoredRoomCode(): string | null {
+  try {
+    return localStorage.getItem(ROOM_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function storeRoomCode(code: string): void {
+  try {
+    localStorage.setItem(ROOM_KEY, code.toUpperCase());
+  } catch {
+    // storage unavailable; in-session navigation still works via router state
+  }
+}
+
+export function clearStoredRoomCode(): void {
+  try {
+    localStorage.removeItem(ROOM_KEY);
+  } catch {
+    // nothing to clear
+  }
+}
+
 /* ---- Ranking ---- */
 
 export interface RankableEntry {

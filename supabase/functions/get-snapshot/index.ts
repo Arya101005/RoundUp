@@ -5,6 +5,11 @@ import { normalizeCodeInput } from '../_shared/rooms/codes.ts';
 
 const schema = z.object({ roomCode: z.string().min(1).max(10) });
 
+/** A closed or deleted room can never be re-entered, so no snapshot exists. */
+function failRoomClosed(now: number) {
+  return fail('ROOM_NOT_FOUND', undefined, now);
+}
+
 export default createHandler(
   'get-snapshot',
   { requireAuth: true },
@@ -20,21 +25,34 @@ export default createHandler(
 
     const code = normalizeCodeInput(parsed.data.roomCode);
 
-    const { data: roomRow } = await client
+    const { data: roomRow, error: roomError } = await client
       .from('rooms')
-      .select('*')
+      .select('id, code, status, game_id')
       .eq('code', code)
       .maybeSingle();
-    if (!roomRow) return fail('ROOM_NOT_FOUND', undefined, now);
-    const room = roomRow as { id: string };
 
-    const { data: membership } = await client
+    if (roomError) {
+      console.error('get-snapshot rooms lookup failed', roomError.message);
+      return fail('SERVER_ERROR', undefined, now);
+    }
+    if (!roomRow) return fail('ROOM_NOT_FOUND', undefined, now);
+    const room = roomRow as { id: string; status: string };
+
+    // A closed room has been purged from the user's view entirely (the last
+    // player left and the room was deleted). Do not leak that it existed.
+    if (room.status === 'closed') return failRoomClosed(now);
+
+    const { data: membership, error: memberError } = await client
       .from('room_players')
       .select('id, left_at')
       .eq('room_id', room.id)
       .eq('user_id', userId)
       .maybeSingle();
 
+    if (memberError) {
+      console.error('get-snapshot membership failed', memberError.message);
+      return fail('SERVER_ERROR', undefined, now);
+    }
     if (!membership) return fail('NOT_IN_ROOM', undefined, now);
     if ((membership as { left_at: string | null }).left_at) {
       // Seat exists but was given up: restore it so refresh mid-game reconnects.
@@ -76,12 +94,17 @@ export default createHandler(
 
     let myView: Record<string, unknown> | null = null;
     if (sessionId) {
-      const { data: viewRow } = await client
+      const { data: viewRow, error: viewError } = await client
         .from('player_views')
         .select('view')
         .eq('session_id', sessionId)
         .eq('user_id', userId)
         .maybeSingle();
+
+      if (viewError) {
+        console.error('get-snapshot view failed', viewError.message);
+        return fail('SERVER_ERROR', undefined, now);
+      }
       myView = ((viewRow as { view: Record<string, unknown> } | null)?.view ?? null);
     }
 

@@ -1,0 +1,4 @@
+# SPA fallback: any path that is not a real file renders index.html with a 200.
+# Pages Functions (e.g. /api/functions/*) take precedence over these rules, so
+# the API is never swallowed by this catch-all.
+/*    /index.html   200

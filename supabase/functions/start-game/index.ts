@@ -37,11 +37,16 @@ export default createHandler('start-game', { requireAuth: true }, async ({ clien
   const allowed = await checkRateLimit(client, `start-game:${userId}`, RATE.max, RATE.windowSeconds);
   if (!allowed) return fail('ACTION_RATE_LIMITED', undefined, now);
 
+  // Resolve the room once. supabase-js has no `SELECT ... FOR UPDATE` builder,
+  // so the atomic guarantee comes from the conditional claim below: only one
+  // writer can move the room out of 'lobby', so no two starts both succeed and
+  // nothing can act on a room that has moved underneath us.
   const { data: roomData, error: roomError } = await client
     .from('rooms')
-    .select('*')
+    .select('id, host_id, status, game_id, theme, difficulty, rounds, config')
     .eq('id', roomId)
     .maybeSingle();
+
   if (roomError) {
     console.error('start-game room load failed', roomError.message);
     return fail('SERVER_ERROR', undefined, now);
@@ -50,25 +55,9 @@ export default createHandler('start-game', { requireAuth: true }, async ({ clien
   if (!room) return fail('ROOM_NOT_FOUND', undefined, now);
   if (room.host_id !== userId) return fail('NOT_HOST', undefined, now);
 
-  // Existing session? Return it (idempotent start) when the game is running.
-  const { data: existingData } = await client
-    .from('game_sessions')
-    .select('id, status')
-    .eq('room_id', roomId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const existing = (existingData ?? null) as { id: string; status: string } | null;
-
-  if (room.status !== 'lobby') {
-    if (room.status === 'closed') return fail('ROOM_CLOSED', undefined, now);
-    if (existing && (existing.status === 'preparing' || existing.status === 'active')) {
-      return ok({ sessionId: existing.id }, Date.now());
-    }
-    return fail('ROOM_ALREADY_STARTED', undefined, now);
-  }
-
-  // Claim the lobby atomically: only one start can win.
+  // Claim the lobby atomically: the `status = 'lobby'` precondition means only
+  // one concurrent start wins. An existing running session is returned
+  // (idempotent) without touching the row.
   const { data: claimed } = await client
     .from('rooms')
     .update({ status: 'preparing', last_activity_at: new Date(now).toISOString() })
@@ -76,10 +65,11 @@ export default createHandler('start-game', { requireAuth: true }, async ({ clien
     .eq('status', 'lobby')
     .select('id')
     .maybeSingle();
+
   if (!claimed) {
-    if (existing && (existing.status === 'preparing' || existing.status === 'active')) {
-      return ok({ sessionId: existing.id }, Date.now());
-    }
+    if (room.status === 'closed') return fail('ROOM_CLOSED', undefined, now);
+    // Another writer beat us to it (or the room was deleted). No stale session
+    // to hand back here, since the claim already failed.
     return fail('ROOM_ALREADY_STARTED', undefined, now);
   }
 
@@ -119,14 +109,27 @@ export default createHandler('start-game', { requireAuth: true }, async ({ clien
       }
     }
 
-    const notReady = players.filter((p) => p.id !== room.host_id && !p.ready);
-    if (notReady.length > 0) {
+    // The host is part of the room: insert the host's seat so the game starts
+    // for *everyone* in the room, not just the ready players. The host has no
+    // The host is part of the room: insert its seat so the game starts for
+    // *everyone* in the room, not just the ready players. The host has no
+    // `ready` flag, so its seat is inserted with a neutral ready=false that the
+    // engines treat as "participating".
+    const { error: hostInsertError } = await client
+      .from('room_players')
+      .insert({
+        room_id: roomId,
+        user_id: room.host_id,
+        display_name: 'Host',
+        ready: false,
+        last_seen_at: new Date().toISOString(),
+      })
+      .select('id')
+      .maybeSingle();
+    if (hostInsertError) {
+      console.error('start-game host player insert failed', hostInsertError.message);
       await release();
-      return fail(
-        'NOT_READY',
-        { names: notReady.map((p) => p.name).join(', ') },
-        now,
-      );
+      return fail('SERVER_ERROR', undefined, now);
     }
 
     const bounds = roundsBounds(gameId);
